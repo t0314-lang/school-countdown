@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>しずきた 残り登校日カウントダウン</title>
+<style>
+:root{--bg:#101827;--panel:#192438;--tile:#0a101c;--accent:#78e0c2;--muted:#aab7cb;--line:#34435b}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:radial-gradient(ellipse at top,#243653 0%,var(--bg) 62%);color:#f7f9ff;font-family:system-ui,-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;display:flex;align-items:center;justify-content:center;padding:24px}
+main{width:min(100%,1000px);text-align:center}
+.eyebrow{font-size:.85rem;letter-spacing:.2em;color:var(--accent);font-weight:700}
+h1{font-size:clamp(1.8rem,5vw,3.2rem);margin:.5rem 0 .4rem;letter-spacing:.04em}
+.subtitle{color:var(--muted);margin:0 auto 2rem;line-height:1.8}
+.counter{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:clamp(8px,2vw,18px)}
+.unit{min-width:0;background:linear-gradient(180deg,#202e45,#151f31);border:1px solid var(--line);border-radius:18px;padding:clamp(10px,2.4vw,22px) clamp(5px,1.4vw,14px) 16px;box-shadow:0 14px 32px #0003}
+.flip{position:relative;display:flex;align-items:center;justify-content:center;height:clamp(78px,17vw,150px);font-variant-numeric:tabular-nums;font-size:clamp(2.2rem,8vw,5.8rem);font-weight:800;letter-spacing:-.04em;background:var(--tile);border-radius:10px;overflow:hidden;text-shadow:0 2px 0 #0008}
+.flip:before{content:"";position:absolute;left:0;right:0;top:50%;height:1px;background:#ffffff20;z-index:1}
+.flip span{display:block;transform-origin:50% 50%;backface-visibility:hidden}
+.flip.animate span{animation:flip .42s ease-in}
+@keyframes flip{0%{transform:rotateX(0);filter:brightness(1)}45%{transform:rotateX(-88deg);filter:brightness(.65)}55%{transform:rotateX(88deg);filter:brightness(.65)}100%{transform:rotateX(0);filter:brightness(1)}}
+.label{margin-top:12px;color:var(--muted);font-size:clamp(.8rem,2vw,1rem);letter-spacing:.12em}
+.status{margin:24px auto 0;padding:14px 18px;background:#192438cc;border:1px solid var(--line);border-radius:12px;line-height:1.8}
+.status strong{color:var(--accent)}
+.details{margin-top:18px;color:var(--muted);font-size:.86rem;line-height:1.9}
+.column{margin:30px auto 0;text-align:left;background:linear-gradient(145deg,#1d2c43,#151f30);border:1px solid var(--line);border-radius:18px;padding:clamp(18px,4vw,28px);box-shadow:0 14px 32px #0002}
+.column-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;color:var(--accent);font-size:.82rem;font-weight:800;letter-spacing:.12em}
+.column h2{font-size:clamp(1.25rem,3vw,1.7rem);margin:0 0 12px;color:#f7f9ff}
+.column p{margin:0;color:#c5d0e1;line-height:1.95}
+.column .date{margin-top:14px;font-size:.78rem;color:#8fa2bd}
+.pill{display:inline-block;border:1px solid #48617c;border-radius:999px;padding:4px 10px;margin:3px;font-size:.8rem}
+footer{color:#7788a2;font-size:.75rem;margin-top:24px}
+@media(max-width:520px){body{padding:18px 12px}.counter{gap:6px}.unit{border-radius:12px;padding:8px 4px 12px}.flip{border-radius:7px}.label{letter-spacing:.04em}.subtitle{margin-bottom:1.3rem}.status{font-size:.9rem}}
+@media(prefers-reduced-motion:reduce){.flip.animate span{animation:none}}
+</style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">SCHOOL DAYS COUNTDOWN</div>
+  <h1>しずきた 残り登校日カウントダウン</h1>
+  <p class="subtitle">3月18日まで、あと少し。<br>登校日にだけ時間が進むカウントダウン。</p>
+  <section class="counter" aria-label="残り時間">
+    <div class="unit"><div class="flip" id="days"><span>--</span></div><div class="label">日</div></div>
+    <div class="unit"><div class="flip" id="hours"><span>--</span></div><div class="label">時間</div></div>
+    <div class="unit"><div class="flip" id="minutes"><span>--</span></div><div class="label">分</div></div>
+    <div class="unit"><div class="flip" id="seconds"><span>--</span></div><div class="label">秒</div></div>
+  </section>
+  <div class="status" id="status" aria-live="polite">カウントダウンを準備しています…</div>
+  <div class="details">
+    <span class="pill">期間：2026/10/09〜2027/03/18</span>
+    <span class="pill">土日・祝日を除外</span>
+    <span class="pill">冬休み：12/23〜1/6</span>
+    <p id="nextday"></p>
+  </div>
+  <section class="column" aria-labelledby="column-title">
+    <div class="column-head"><span>✦</span> DAILY COLUMN</div>
+    <h2 id="column-title">今日は何の日？</h2>
+    <p id="column-text">今日にまつわるコラムを読み込み中です。</p>
+    <div class="date" id="column-date"></div>
+    <div id="column-links"></div>
+  </section>
+  <footer>日本の祝日を反映（振替休日・国民の休日を含む）</footer>
+</main>
+<script>
+(() => {
+  // 学校日の終了時刻。日付単位で登校日を数え、各登校日の終わりまでを残り時間に加算します。
+  // 表示上の残り時間は、登校日の間だけ減少し、休業日は停止します。
+  const START = '2026-10-09';
+  const END = '2027-03-18'; // この日を最終登校日として含む
+  const WINTER_START = '2026-12-23';
+  const WINTER_END = '2027-01-06';
+  // 日本の祝日・振替休日・国民の休日（対象期間）
+  const holidays = new Set([
+    '2026-10-12', // スポーツの日（期間開始前。念のため）
+    '2026-11-03', // 文化の日
+    '2026-11-23', // 勤労感謝の日
+    '2027-01-01', // 元日
+    '2027-01-11', // 成人の日
+    '2027-02-11', // 建国記念の日
+    '2027-02-23', // 天皇誕生日
+    '2027-03-21', // 春分の日（期間後）
+    '2027-03-22'  // 春分の日の振替休日（期間後）
+  ]);
+  const parseDate = s => {
+    const [y,m,d] = s.split('-').map(Number);
+    return new Date(y,m-1,d,0,0,0,0);
+  };
+  const dateKey = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const isSchoolDay = d => {
+    const key = dateKey(d), weekday = d.getDay();
+    return key >= START && key <= END &&
+      weekday !== 0 && weekday !== 6 &&
+      !holidays.has(key) &&
+      !(key >= WINTER_START && key <= WINTER_END);
+  };
+  const schoolDays = [];
+  for(let d=parseDate(START); d<=parseDate(END); d.setDate(d.getDate()+1)){
+    if(isSchoolDay(d)) schoolDays.push(dateKey(d));
+  }
+  const ids = ['days','hours','minutes','seconds'];
+
+  // Web上の情報から「今日は何の日？」を取得（Wikipedia / Wikimedia REST API）
+  async function updateColumn(now){
+    const titleEl=document.getElementById('column-title');
+    const textEl=document.getElementById('column-text');
+    const dateEl=document.getElementById('column-date');
+    const linksEl=document.getElementById('column-links');
+    const month=String(now.getMonth()+1).padStart(2,'0');
+    const day=String(now.getDate()).padStart(2,'0');
+    const dateLabel=`${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日`;
+    dateEl.textContent=`${dateLabel}｜Wikipediaの公開情報を取得`;
+    // 同じ日付の再取得を避ける
+    const key=`${now.getFullYear()}-${month}-${day}`;
+    if(updateColumn.lastKey===key && (updateColumn.loaded || updateColumn.loading))return;
+    updateColumn.lastKey=key;
+    updateColumn.loaded=false;
+    updateColumn.loading=true;
+    titleEl.textContent='今日は何の日？';
+    textEl.textContent='Web上から今日の記念日・歴史上の出来事を検索しています…';
+    linksEl.replaceChildren();
+    const url=`https://ja.wikipedia.org/api/rest_v1/feed/onthisday/events/${month}/${day}`;
+    try{
+      const response=await fetch(url,{headers:{'Accept':'application/json'}});
+      if(!response.ok) throw new Error('日本語版Wikipediaから取得できませんでした');
+      const data=await response.json();
+      const payload=Array.isArray(data.events)?data.events:[];
+      if(!payload.length) throw new Error('日本語の情報が見つかりませんでした');
+      // 日本語版Wikipediaの情報だけを使用し、上位3件を表示
+      const chosen=payload.slice(0,3);
+      titleEl.textContent=`今日は何の日？｜${chosen[0].year ? chosen[0].year+'年の出来事' : '歴史の出来事'}`;
+      textEl.textContent=chosen.map(item=>`${item.year ? item.year+'年：' : ''}${item.text || item.pages?.[0]?.title || '歴史上の出来事'}`).join('\n\n');
+      textEl.style.whiteSpace='pre-line';
+      chosen.forEach(item=>{
+        const page=item.pages && item.pages[0];
+        if(!page || !page.content_urls?.desktop?.page || !page.content_urls.desktop.page.includes('ja.wikipedia.org')) return;
+        const a=document.createElement('a');
+        a.href=page.content_urls.desktop.page;
+        a.target='_blank';a.rel='noopener noreferrer';
+        a.textContent=page.title || '詳しく読む';
+        a.style.cssText='display:inline-block;margin:10px 8px 0 0;color:#78e0c2;text-decoration:underline;font-size:.9rem';
+        linksEl.appendChild(a);
+      });
+      const sourceNote=document.createElement('span');
+      sourceNote.textContent='出典：日本語版Wikipedia（記事の内容はリンク先で確認できます）';
+      sourceNote.style.cssText='display:block;margin-top:12px;color:#8fa2bd;font-size:.78rem';
+      linksEl.appendChild(sourceNote);
+      updateColumn.loaded=true;
+      updateColumn.loading=false;
+    }catch(error){
+      titleEl.textContent='今日は何の日？';
+      textEl.textContent='日本語のコラム情報を取得できませんでした。ネットワークや公開元の状態によって取得できないことがあります。';
+      const retry=document.createElement('button');
+      retry.type='button';
+      retry.textContent='日本語の情報を再取得する';
+      retry.style.cssText='display:inline-block;margin:12px 10px 0 0;padding:9px 13px;border:1px solid #78e0c2;border-radius:8px;background:transparent;color:#78e0c2;cursor:pointer;font:inherit';
+      retry.addEventListener('click',()=>{updateColumn.loaded=false;updateColumn.loading=false;updateColumn.lastKey=null;updateColumn(now);});
+      linksEl.appendChild(retry);
+      const a=document.createElement('a');
+      a.href=`https://www.google.com/search?q=${encodeURIComponent(now.getMonth()+1+'月'+now.getDate()+'日 今日は何の日 記念日 歴史 site:ja.wikipedia.org')}`;
+      a.target='_blank';a.rel='noopener noreferrer';a.textContent='日本語のWeb検索を開く';
+      a.style.cssText='display:inline-block;margin-top:12px;color:#78e0c2;text-decoration:underline';
+      linksEl.appendChild(a);
+      updateColumn.loaded=true;
+      updateColumn.loading=false;
+    }
+  }
+  const prev = {};
+  function setFlip(id,value){
+    const el=document.getElementById(id), str=String(value).padStart(2,'0');
+    if(prev[id]===str)return;
+    const span=el.querySelector('span');
+    span.textContent=str;
+    el.classList.remove('animate');
+    void el.offsetWidth;
+    if(prev[id]!==undefined)el.classList.add('animate');
+    prev[id]=str;
+  }
+  const fmt = d => `${d.getMonth()+1}月${d.getDate()}日`;
+  function update(){
+    const now=new Date();
+    if(!updateColumn.loaded || updateColumn.lastKey!==`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`) updateColumn(now);
+    const todayKey=dateKey(now);
+    const endDate=parseDate(END);
+    const todayIsSchool=isSchoolDay(now);
+    const remaining=schoolDays.filter(k=>k>todayKey);
+    const currentOrNext=todayIsSchool && schoolDays.includes(todayKey) ? todayKey : (remaining[0]||null);
+    let secondsLeft=0, schoolDaysLeft=0;
+    let message='';
+    if(todayKey < START){
+      schoolDaysLeft=schoolDays.length;
+      secondsLeft=schoolDays.reduce((sum,k)=>sum+86400,0);
+      message=`開始まで待機中。開始日は <strong>${fmt(parseDate(START))}</strong> です。`;
+    } else if(todayKey > END || (todayKey===END && now.getTime()>=endDate.getTime()+86400000)){
+      secondsLeft=0;
+      message='<strong>今年度の登校日カウントダウン終了！</strong>';
+    } else {
+      // 今日が登校日なら、今日の残り時間＋未来の登校日ぶんをカウント。
+      // 休業日は次の登校日まで時計を停止し、残り時間は変化しません。
+      const daysToCount=schoolDays.filter(k=>k>=todayKey);
+      schoolDaysLeft=daysToCount.length;
+      for(const k of daysToCount){
+        if(k===todayKey && todayIsSchool){
+          const midnight=parseDate(k).getTime();
+          const elapsed=(now.getTime()-midnight)/1000;
+          secondsLeft += Math.max(0,86400-elapsed);
+        }else{
+          secondsLeft += 86400;
+        }
+      }
+      if(todayIsSchool){
+        message=`今日は登校日です。<strong>${fmt(now)}</strong> の残り時間をカウントしています。`;
+      }else if(currentOrNext){
+        message=`今日は休業日です。時計は停止中。次の登校日 <strong>${fmt(parseDate(currentOrNext))}</strong> に再開します。`;
+      }else{
+        message='<strong>今年度の登校日カウントダウン終了！</strong>';
+      }
+    }
+    secondsLeft=Math.max(0,Math.floor(secondsLeft));
+    const d=Math.floor(secondsLeft/86400);
+    const h=Math.floor((secondsLeft%86400)/3600);
+    const m=Math.floor((secondsLeft%3600)/60);
+    const s=secondsLeft%60;
+    setFlip('days',String(d).padStart(2,'0'));
+    setFlip('hours',String(h).padStart(2,'0'));
+    setFlip('minutes',String(m).padStart(2,'0'));
+    setFlip('seconds',String(s).padStart(2,'0'));
+    document.getElementById('status').innerHTML=message;
+    document.getElementById('nextday').textContent=`登校日数（今日を含む）：${schoolDaysLeft}日 ／ 対象登校日：${schoolDays.length}日`;
+  }
+  update();
+  setInterval(update,1000);
+})();
+</script>
+</body>
+</html>
